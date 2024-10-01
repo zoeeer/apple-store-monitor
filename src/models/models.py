@@ -160,8 +160,79 @@ class AvailabilityHistory(Model):
             logger.info(f"AvailabilityHistory: updated availability {is_available} for {product.part_number} ({product.product_title}) at store {store_number} ({store.name})")
 
     @classmethod
-    def parse_inventory_from_product_details(cls, product_details):
-        if not product_details:
-            return None
-        
-        return product_details.get("buyability", {}).get("inventory", None)
+    def query_latest_availability(cls):
+        latest_availability = (
+            AvailabilityHistory
+            .select()
+            .distinct(AvailabilityHistory.store_number, AvailabilityHistory.part_number)
+            .order_by(AvailabilityHistory.store_number, AvailabilityHistory.part_number, AvailabilityHistory.update_time.desc())
+        )
+        return latest_availability
+
+
+class LatestAvailability(AvailabilityHistory):
+    """
+    A view of AvailabilityHistory with the latest availability of each product - store pair:
+
+    CREATE VIEW latest_availability AS (
+    SELECT DISTINCT ON (store_number, part_number)
+        *
+    FROM availability_history
+    ORDER BY store_number, part_number, update_time DESC
+    );
+    """
+    class Meta:
+        database = db
+        db_table = 'latest_availability'
+
+    @classmethod
+    def query_available(cls, is_available):
+        return LatestAvailability.select().where(LatestAvailability.is_available == is_available)
+
+    @classmethod
+    def query_part_availability(cls, part_number: str):
+        return LatestAvailability.select().where(LatestAvailability.part_number == part_number)
+
+    @classmethod
+    def query_product_availability(cls, product: Product):
+        return LatestAvailability.select().where(LatestAvailability.part_number == product.part_number)
+
+    @classmethod
+    def is_product_available(cls, product: Product):
+        query_available = cls.query_product_availability(product).where(LatestAvailability.is_available == True)
+        return query_available.count() > 0
+
+    @classmethod
+    def is_part_available(cls, part_number: str):
+        query_available = cls.query_part_availability(part_number).where(LatestAvailability.is_available == True)
+        return query_available.count() > 0
+
+
+def test_get_latest_availability():
+    """
+    failed:
+    generated query has a unexpected "LIMIT ?" clause inside the WITH query
+    """
+    latest_availability = (
+        AvailabilityHistory
+        .select()
+        .distinct(AvailabilityHistory.store_number, AvailabilityHistory.part_number)
+        .order_by(AvailabilityHistory.store_number, AvailabilityHistory.part_number, AvailabilityHistory.update_time.desc())
+    )
+
+    print(latest_availability.count())
+    print(latest_availability.first())
+
+    cte = latest_availability.cte('latest_availability')
+
+    available_pairs = (
+        cte
+        .select_from(cte.c.id, cte.c.store_number, cte.c.part_number)
+        .where(cte.c.is_available == True)
+    )
+
+    print(available_pairs.count())
+    print(available_pairs.first())
+
+    for item in available_pairs:
+        print(item)

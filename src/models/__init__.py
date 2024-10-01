@@ -1,5 +1,8 @@
 from .base import db, Model, MyJsonEncoder
-from .models import Product, Store, AvailabilityHistory
+from .models import (
+    Product, Store, AvailabilityHistory,
+    LatestAvailability,  # view
+)
 
 all_models = (
     Store,

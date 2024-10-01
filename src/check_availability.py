@@ -6,8 +6,9 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse, parse_qs
 
-from models import AvailabilityHistory, Product
+from models import AvailabilityHistory, Product, LatestAvailability
 from common import logger
+from notify import send_text
 
 
 models = {
@@ -162,11 +163,23 @@ def request_recommendations(product, cookie_jar=None, update_cookie_jar=False, h
     return check_recommendations_availability(response.content.decode())
 
 
-def check_product_availability(product, recursive=False) -> tuple[bool, bool]:
+def check_product_availability(product: Product | str, recursive=False) -> tuple[bool, bool]:
+    if isinstance(product, str):
+        product: Product = Product.get(Product.part_number == product)
+    prev_availability = LatestAvailability.is_product_available(product)
+
     time.sleep(0.1)
-    available_stores = bool(request_fulfillment(product))
+    available_stores = bool(request_fulfillment(product.part_number))
     time.sleep(0.1)
-    recommended_products = request_recommendations(product)
+    recommended_products = request_recommendations(product.part_number)
+
+    if prev_availability != bool(available_stores):
+        logger.info(f"Availability of {product.part_number} ({product.product_title}) changed!")
+        # send notification
+        if available_stores:
+            send_text(f"Congratulations! {product.part_number} {product.capacity}-{product.finish} is available.")
+        else:
+            send_text(f"Sorry. {product.part_number} {product.capacity}-{product.finish} sold out.")
 
     if len(recommended_products) < 3:
         # update availability for recommended_products
@@ -177,7 +190,7 @@ def check_product_availability(product, recursive=False) -> tuple[bool, bool]:
         # update all other products to not available
         all_available_products = recommended_products.copy()
         if available_stores:
-            all_available_products.add(product)
+            all_available_products.add(product.part_number)
         AvailabilityHistory.set_nearly_unavailable(all_available_products)
 
     if not recursive or len(recommended_products) < 3:
@@ -194,15 +207,20 @@ def check_availability(product=None, randomly=False, check_all=False, recursive=
     if product:
         check_product_availability(product, recursive)
     elif randomly:
-        part_number = random.choice(list(models.values()))
-        check_product_availability(part_number, recursive)
+        # Randomly select a known product
+        product_count = Product.select().count()
+        random_offset = random.randrange(product_count)
+        logger.debug(f"random product offset {random_offset} from {product_count} products")
+        product: Product = Product.select().offset(random_offset).first()
+        logger.info(f"Checking availability for {product.part_number} ({product.product_title})")
+        check_product_availability(product, recursive)
     elif check_all:
         for part_number in models.values():
             check_product_availability(part_number, recursive)
             time.sleep(3 + random.uniform(0.1, 2.5))
         return
     else:
-        logger.warn("No product is checked.")
+        logger.warning("No product is checked.")
 
 
 if __name__ == "__main__":
