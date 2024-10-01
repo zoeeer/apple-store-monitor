@@ -6,6 +6,7 @@ from peewee import (
 )
 
 from .base import db, Model
+from common import logger
 
 class Store(Model):
     store_number = CharField(primary_key=True, max_length=10)
@@ -96,6 +97,7 @@ class AvailabilityHistory(Model):
     product_id = IntegerField(null=True)
     is_available = BooleanField()
     inventory = IntegerField(null=True)
+    create_time = DateTimeField()
     update_time = DateTimeField()
 
     class Meta:
@@ -123,8 +125,8 @@ class AvailabilityHistory(Model):
     @classmethod
     def store_availability(cls, store_number, part_number, is_available, product_details=None):
         product_properties = Product.try_parse_product_details(product_details)
-        print(f"Storing availability: store_number={store_number}, part_number={part_number}, is_available={is_available}")
-        print(product_properties)
+        logger.info(f"Storing availability: store_number={store_number}, part_number={part_number}, is_available={is_available}")
+        logger.info(product_properties.get("product_title", "no product_title"))
         product : Product
         product, _ = Product.get_or_create(
                         part_number=part_number,
@@ -137,15 +139,6 @@ class AvailabilityHistory(Model):
         inventory = cls.parse_inventory_from_product_details(product_details)
 
         cls.update_availability(store_number, product, is_available, inventory)
-
-        # AvailabilityHistory.create(
-        #     store_number=store_number,
-        #     part_number=part_number,
-        #     product_id=product.id,
-        #     is_available=is_available,
-        #     inventory=inventory,
-        #     update_time=datetime.now()
-        # )
 
     @classmethod
     def update_availability(cls, store_number, product: Product, is_available: bool, inventory: int):
@@ -172,6 +165,7 @@ class AvailabilityHistory(Model):
                 and inventory == previous_record.inventory:
             should_insert = False
 
+        current_time = datetime.now()
         if should_insert:
             AvailabilityHistory.create(
                 store_number=store_number,
@@ -179,11 +173,14 @@ class AvailabilityHistory(Model):
                 product_id=product.id,
                 is_available=is_available,
                 inventory=inventory,
-                update_time=datetime.now()
+                update_time=current_time,
+                create_time=current_time,
             )
+            logger.info(f"AvailabilityHistory: inserted availability for {product.part_number} ({product.product_title}) at store {store_number}")
         else:
-            current_record.update_time = datetime.now()
+            current_record.update_time = current_time
             current_record.save()
+            logger.info(f"AvailabilityHistory: updated availability for {product.part_number} ({product.product_title}) at store {store_number}")
 
     @classmethod
     def parse_inventory_from_product_details(cls, product_details):

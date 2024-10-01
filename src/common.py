@@ -24,3 +24,5 @@ def config_logger(logger_or_name, level=log_level):
     logger.addHandler(handler)
 
     return logger
+
+logger = config_logger(__name__)
