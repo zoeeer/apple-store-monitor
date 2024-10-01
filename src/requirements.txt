@@ -1,0 +1,7 @@
+requests
+schedule
+
+peewee
+peewee-migrations
+#psycopg2    # database driver; compiles on installation
+psycopg2-binary    # pre-built version for psycopg2; available on Linux and MacOS

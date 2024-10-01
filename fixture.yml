@@ -1,0 +1,43 @@
+stores:
+  - name: Causeway Bay
+    country: HK
+    city: 香港
+    store_number: R409
+    address: Apple Causeway Bay
+    address2: 希慎廣場
+    address3: 銅鑼灣軒尼詩道 500 號
+  - name: ifc mall
+    country: HK
+    city: 香港
+    store_number: R428
+    address: Apple ifc mall
+    address2: 國際金融中心商場
+    address3: 中環金融街 8 號
+  - name: Canton Road
+    country: HK
+    city: 香港
+    store_number: R499
+    address: Apple Canton Road
+    address2: 尖沙咀廣東道 100 號
+    address3: null
+  - name: apm Hong Kong
+    country: HK
+    city: 香港
+    store_number: R673
+    address: Apple apm Hong Kong
+    address2: 觀塘觀塘道 418 號
+    address3: null
+  - name: Festival Walk
+    country: HK
+    city: 香港
+    store_number: R485
+    address: Apple Festival Walk
+    address2: 又一城
+    address3: 九龍塘達之路 80 號
+  - name: New Town Plaza
+    country: HK
+    city: 香港
+    store_number: R610
+    address: Apple New Town Plaza
+    address2: 新城市廣場 1 期 L4
+    address3: 沙田沙田正街 18 號
