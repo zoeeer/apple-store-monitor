@@ -19,7 +19,7 @@ if os.environ.get('APP_DEBUG_ECHO_SQL'):
     logger.addHandler(logging.StreamHandler())
     logger.setLevel(logging.DEBUG)
 
-DBPath = os.environ.get('APP_DB_PATH', ':memory:')
+DB_Path = os.environ.get('APP_DB_PATH', ':memory:')
 DB_HOST = os.environ.get('APP_DB_HOST')
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,8 @@ if DB_HOST:
 # fall back to SQLite
 else:
     # Database: SQLite
-    db = SqliteDatabase(DBPath)
-    logger.info(f"Connected to SQLite at {db.connect_params}")
+    db = SqliteDatabase(DB_Path)
+    logger.info(f"Connected to SQLite at {DB_Path}")
 
 
 class Model(_Model):

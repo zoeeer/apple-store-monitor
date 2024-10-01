@@ -55,7 +55,7 @@ def check_fulfillment_availability(data) -> list[str]:
             if is_available:
                 available_stores.append(store['storeName'])  # Save the store's name
 
-            AvailabilityHistory.store_availability(
+            AvailabilityHistory.set_availability(
                 store["storeNumber"],
                 part_number,
                 is_available,
@@ -80,7 +80,7 @@ def check_recommendations_availability(data) -> list[str]:
         parts_availability = store['partsAvailability']
 
         for part_number, details in parts_availability.items():
-            AvailabilityHistory.store_availability(
+            AvailabilityHistory.set_availability(
                 store["storeNumber"],
                 part_number,
                 True,
@@ -169,16 +169,16 @@ def check_product_availability(product, recursive=False) -> tuple[bool, bool]:
     recommended_products = request_recommendations(product)
 
     if len(recommended_products) < 3:
+        # update availability for recommended_products
+        for p in recommended_products:
+            time.sleep(0.1)
+            request_fulfillment(p)
+
         # update all other products to not available
         all_available_products = recommended_products.copy()
         if available_stores:
             all_available_products.add(product)
         AvailabilityHistory.set_nearly_unavailable(all_available_products)
-
-        # update availability for recommended_products
-        for p in recommended_products:
-            time.sleep(0.1)
-            request_fulfillment(p)
 
     if not recursive or len(recommended_products) < 3:
         return (available_stores, recommended_products)

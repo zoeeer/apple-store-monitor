@@ -7,6 +7,10 @@ from peewee import (
 
 from .base import db, Model
 from common import logger
+from api_helpers import (
+    parse_inventory_from_product_details,
+    try_parse_product_details,
+)
 
 class Store(Model):
     store_number = CharField(primary_key=True, max_length=10)
@@ -44,39 +48,6 @@ class Product(Model):
             return product.id
         except cls.DoesNotExist:
             return None
-
-    @classmethod
-    def parse_product_title(cls, product_title):
-        # Regular expression to match the pattern
-        match = re.search(r'^(.*?)\s+(\d+GB)\s+(.*)$', product_title)
-        
-        if match:
-            model = match.group(1).strip()  # Text before capacity
-            capacity = match.group(2).strip()  # Capacity itself
-            finish = match.group(3).strip()  # Text after capacity
-            return model, capacity, finish
-        return None, None, None  # Return None if no match found
-
-    @classmethod
-    def try_parse_product_details(cls, details):
-        try:
-            message_types = details["messageTypes"]
-            product_title = message_types["regular"]["storePickupProductTitle"]
-            # messages = list(message_types.values())
-            # product_title = messages[0]["storePickupProductTitle"]
-        except:
-            product_title = None
-
-        if product_title:
-            model, capacity, finish = cls.parse_product_title(product_title)
-            return dict(
-                product_title=product_title,
-                model=model,
-                capacity=capacity,
-                finish=finish
-            )
-        else:
-            return {}
 
 
 class AvailabilityHistory(Model):
@@ -119,7 +90,7 @@ class AvailabilityHistory(Model):
         store: Store
         for product in query_other_products:
             for store in Store.select():
-                cls.update_availability(
+                cls.update_or_insert(
                     store.store_number,
                     product,
                     False,
@@ -127,8 +98,8 @@ class AvailabilityHistory(Model):
                 )
 
     @classmethod
-    def store_availability(cls, store_number, part_number, is_available, product_details=None):
-        product_properties = Product.try_parse_product_details(product_details)
+    def set_availability(cls, store_number, part_number, is_available, product_details=None):
+        product_properties = try_parse_product_details(product_details)
         logger.info(f"Storing availability: store_number={store_number}, part_number={part_number}, is_available={is_available}")
         logger.info(product_properties.get("product_title", "no product_title"))
         product : Product
@@ -140,12 +111,12 @@ class AvailabilityHistory(Model):
             product.update_from_dict(product_properties)
             product.save()
 
-        inventory = cls.parse_inventory_from_product_details(product_details)
+        inventory = parse_inventory_from_product_details(product_details)
 
-        cls.update_availability(store_number, product, is_available, inventory)
+        cls.update_or_insert(store_number, product, is_available, inventory)
 
     @classmethod
-    def update_availability(cls, store_number, product: Product, is_available: bool, inventory: int):
+    def update_or_insert(cls, store_number, product: Product, is_available: bool, inventory: int = None):
         store: Store = Store.get_by_id(store_number)
 
         # Retrieve the last two records for the given store and product
