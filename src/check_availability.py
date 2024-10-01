@@ -1,16 +1,20 @@
 import argparse
-import requests
 import json
+import requests
+import random
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse, parse_qs
 
-from models import AvailabilityHistory
+from models import AvailabilityHistory, Product
+from common import logger
+
 
 models = {
     "desert-256g": "MYLV3ZA/A",
     # "desert-512g": "MYM23ZA/A",
-    # "white-256g": "MYLU3ZA/A",
-    # "black-128g": "MYLN3ZA/A"
+    "white-256g": "MYLU3ZA/A",
+    "black-128g": "MYLN3ZA/A"
 }
 
 apple_store_urls = {
@@ -35,7 +39,10 @@ recommendations_url = apple_store_urls["pickup-message-recommendations"]["decode
 fulfillment_url = apple_store_urls["fulfillment-messages"]["encoded"]
 
 
-def check_fulfillment_availability(data) -> int:
+session = None
+
+
+def check_fulfillment_availability(data) -> list[str]:
     data = json.loads(data)
     available_stores = []
 
@@ -61,19 +68,16 @@ def check_fulfillment_availability(data) -> int:
     else:
         print("Your iPhone is not available")
 
-    return len(available_stores)
+    return available_stores
 
 
-def check_recommendations_availability(data):
+def check_recommendations_availability(data) -> list[str]:
     data = json.loads(data)
-    available_stores = []
+    recommended_products = set()
 
     for store in data['body']['PickupMessage']['stores']:
         # Check if partsAvailability is not empty
         parts_availability = store['partsAvailability']
-
-        if parts_availability:
-            available_stores.append(store['storeName'])  # Save the store's name
 
         for part_number, details in parts_availability.items():
             AvailabilityHistory.store_availability(
@@ -82,25 +86,23 @@ def check_recommendations_availability(data):
                 True,
                 product_details=details
             )
+            recommended_products.add(part_number)
 
     # Check if more than one store is available
-    if available_stores:
-        print("Similar iPhone is available at:", available_stores)
+    if recommended_products:
+        print("Similar iPhone available:", recommended_products)
     else:
         print("No similar iPhone available")
-        AvailabilityHistory.nothing_available()
+        # AvailabilityHistory.nothing_available()
+    return recommended_products
 
 
-def request_fulfillment(product=None, cookie_jar=None, update_cookie_jar=False, har_save_path=None) -> int:
-    if product is None:
-        for part_number in models.values():
-            request_fulfillment(product=part_number)
-        return
-
+def request_fulfillment(product, cookie_jar=None, update_cookie_jar=False, har_save_path=None) -> list[str]:
     url_template = apple_store_urls["fulfillment-messages"]["format"]
     url = url_template.format(part_number=product)
 
-    print(url)
+    logger.info(f"Requesting fulfillment for {product}")
+    logger.debug(url)
 
     # Step 1: Create a session and load cookies if provided
     session = requests.Session()
@@ -117,10 +119,15 @@ def request_fulfillment(product=None, cookie_jar=None, update_cookie_jar=False, 
         print("failed")
         return
 
+    # Update cookie jar if requested
+    if update_cookie_jar and cookie_jar:
+        with open(cookie_jar, 'w') as f:
+            json.dump(session.cookies.get_dict(), f)
+
     return check_fulfillment_availability(response.content.decode())
 
 
-def request_recommendations(product=None, cookie_jar=None, update_cookie_jar=False, har_save_path=None):
+def request_recommendations(product, cookie_jar=None, update_cookie_jar=False, har_save_path=None) -> list[str]:
     url_template = apple_store_urls["pickup-message-recommendations"]["format"]
 
     if product is None:
@@ -147,36 +154,62 @@ def request_recommendations(product=None, cookie_jar=None, update_cookie_jar=Fal
         print("failed")
         return
 
-    check_recommendations_availability(response.content.decode())
-
-
-def request_check_availability(url, cookie_jar=None, update_cookie_jar=False, har_save_path=None):
-    # Step 1: Create a session and load cookies if provided
-    session = requests.Session()
-    if cookie_jar:
-        with open(cookie_jar, 'r') as f:
-            cookies = json.load(f)
-            session.cookies.update(cookies)
-
-    # Step 2: Send HTTP request
-    response = session.get(url)
-
-    # Step 3: Parse response
-    if response.status_code != 200:
-        print("failed")
-        return
-
-    check_recommendations_availability(response.content.decode())
-
-
     # Update cookie jar if requested
     if update_cookie_jar and cookie_jar:
         with open(cookie_jar, 'w') as f:
             json.dump(session.cookies.get_dict(), f)
 
+    return check_recommendations_availability(response.content.decode())
+
+
+def check_product_availability(product, recursive=False) -> tuple[bool, bool]:
+    time.sleep(0.1)
+    available_stores = bool(request_fulfillment(product))
+    time.sleep(0.1)
+    recommended_products = request_recommendations(product)
+
+    if len(recommended_products) < 3:
+        # update all other products to not available
+        all_available_products = recommended_products.copy()
+        if available_stores:
+            all_available_products.add(product)
+        AvailabilityHistory.set_nearly_unavailable(all_available_products)
+
+        # update availability for recommended_products
+        for p in recommended_products:
+            time.sleep(0.1)
+            request_fulfillment(p)
+
+    if not recursive or len(recommended_products) < 3:
+        return (available_stores, recommended_products)
+
+    for p in recommended_products:
+        check_product_availability(p)
+
+    return None, None
+
+
+def check_availability(product=None, randomly=False, check_all=False, recursive=False):
+
+    if product:
+        check_product_availability(product, recursive)
+    elif randomly:
+        part_number = random.choice(list(models.values()))
+        check_product_availability(part_number, recursive)
+    elif check_all:
+        for part_number in models.values():
+            check_product_availability(part_number, recursive)
+            time.sleep(3 + random.uniform(0.1, 2.5))
+        return
+    else:
+        logger.warn("No product is checked.")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Save HTTP request and response in HAR format.")
+    parser.add_argument("--product", help="Product part number.")
+    parser.add_argument("--random", action="store_true", help="Check availability for a random product.")
+    parser.add_argument("--check-all", action="store_true", help="Check availability for all products.")
     parser.add_argument("--url", help="URL to send the request to.", default=recommendations_url)
     parser.add_argument("--har-save-path", type=str, help="File path to save HAR to.")
     parser.add_argument("--cookie-jar", type=str, help="Input cookie jar file path.")
@@ -184,7 +217,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    request_fulfillment()
-    request_recommendations()
-    # request_check_availability(args.url, args.cookie_jar, args.update_cookies, args.har_save_path)
-
+    check_availability(args.product, args.random, args.check_all)

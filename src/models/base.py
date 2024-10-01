@@ -35,11 +35,13 @@ if DB_HOST:
         password=os.environ['APP_DB_PASSWD'],  # Ditto.
         autorollback=True,
     )
+    logger.info(f"Connected to Postgres at {db.connect_params["host"]}:{db.connect_params["port"]}")
 
 # fall back to SQLite
 else:
     # Database: SQLite
     db = SqliteDatabase(DBPath)
+    logger.info(f"Connected to SQLite at {db.connect_params}")
 
 
 class Model(_Model):

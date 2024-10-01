@@ -109,17 +109,21 @@ class AvailabilityHistory(Model):
         )
 
     @classmethod
-    def nothing_available(cls):
-        current_time = datetime.now()
+    def set_nearly_unavailable(cls, available_products):
+        query_other_products = \
+                Product.select() \
+                .where(Product.part_number.not_in(available_products))
 
-        for product in Product.select():
+        logger.warning(f"Except {available_products}, update all others to unavailable")
+        product: Product
+        store: Store
+        for product in query_other_products:
             for store in Store.select():
-                AvailabilityHistory.create(
-                    store_number=store.store_number,
-                    part_number=product.part_number,
-                    product_id=product.product_id,
-                    is_available=False,
-                    update_time=datetime.now()
+                cls.update_availability(
+                    store.store_number,
+                    product,
+                    False,
+                    inventory=None
                 )
 
     @classmethod
@@ -142,6 +146,8 @@ class AvailabilityHistory(Model):
 
     @classmethod
     def update_availability(cls, store_number, product: Product, is_available: bool, inventory: int):
+        store: Store = Store.get_by_id(store_number)
+
         # Retrieve the last two records for the given store and product
         select_latest_two_records = (
             AvailabilityHistory
@@ -176,11 +182,11 @@ class AvailabilityHistory(Model):
                 update_time=current_time,
                 create_time=current_time,
             )
-            logger.info(f"AvailabilityHistory: inserted availability for {product.part_number} ({product.product_title}) at store {store_number}")
+            logger.info(f"AvailabilityHistory: inserted availability for {product.part_number} ({product.product_title}) at store {store_number} ({store.name})")
         else:
             current_record.update_time = current_time
             current_record.save()
-            logger.info(f"AvailabilityHistory: updated availability for {product.part_number} ({product.product_title}) at store {store_number}")
+            logger.info(f"AvailabilityHistory: updated availability for {product.part_number} ({product.product_title}) at store {store_number} ({store.name})")
 
     @classmethod
     def parse_inventory_from_product_details(cls, product_details):
