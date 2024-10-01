@@ -67,7 +67,7 @@ class AvailabilityHistory(Model):
     part_number = CharField(max_length=10)
     product_id = IntegerField(null=True)
     is_available = BooleanField()
-    inventory = IntegerField(null=True)
+    inventory = IntegerField()
     create_time = DateTimeField()
     update_time = DateTimeField()
 
@@ -93,15 +93,15 @@ class AvailabilityHistory(Model):
                 cls.update_or_insert(
                     store.store_number,
                     product,
-                    False,
-                    inventory=None
+                    is_available=False,
+                    inventory=0
                 )
 
     @classmethod
     def set_availability(cls, store_number, part_number, is_available, product_details=None):
         product_properties = try_parse_product_details(product_details)
         logger.info(f"Storing availability: store_number={store_number}, part_number={part_number}, is_available={is_available}")
-        logger.info(product_properties.get("product_title", "no product_title"))
+        logger.debug(product_properties.get("product_title", "no product_title"))
         product : Product
         product, _ = Product.get_or_create(
                         part_number=part_number,
@@ -111,12 +111,12 @@ class AvailabilityHistory(Model):
             product.update_from_dict(product_properties)
             product.save()
 
-        inventory = parse_inventory_from_product_details(product_details)
+        inventory = parse_inventory_from_product_details(product_details) or 0
 
         cls.update_or_insert(store_number, product, is_available, inventory)
 
     @classmethod
-    def update_or_insert(cls, store_number, product: Product, is_available: bool, inventory: int = None):
+    def update_or_insert(cls, store_number, product: Product, is_available: bool, inventory: int):
         store: Store = Store.get_by_id(store_number)
 
         # Retrieve the last two records for the given store and product
@@ -153,11 +153,11 @@ class AvailabilityHistory(Model):
                 update_time=current_time,
                 create_time=current_time,
             )
-            logger.info(f"AvailabilityHistory: inserted availability for {product.part_number} ({product.product_title}) at store {store_number} ({store.name})")
+            logger.info(f"AvailabilityHistory: inserted availability {is_available} for {product.part_number} ({product.product_title}) at store {store_number} ({store.name})")
         else:
             current_record.update_time = current_time
             current_record.save()
-            logger.info(f"AvailabilityHistory: updated availability for {product.part_number} ({product.product_title}) at store {store_number} ({store.name})")
+            logger.info(f"AvailabilityHistory: updated availability {is_available} for {product.part_number} ({product.product_title}) at store {store_number} ({store.name})")
 
     @classmethod
     def parse_inventory_from_product_details(cls, product_details):
