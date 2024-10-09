@@ -107,7 +107,7 @@ class AvailabilityHistory(Model):
                         part_number=part_number,
                         defaults=product_properties
                     )
-        if product.product_title is None:
+        if product.product_title is None or product.model is None:
             product.update_from_dict(product_properties)
             product.save()
 
