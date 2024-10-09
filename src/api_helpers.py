@@ -2,13 +2,22 @@ import re
 
 
 def parse_product_title(product_title):
-    # Regular expression to match the pattern
-    match = re.search(r'^(.*?)\s+(\d+GB)\s+(.*)$', product_title)
-    
+    """
+    Parse product_title string to (model, capacity, finish)
+
+    Uses a regular expression to capture the `capacity` in the middle. Anything
+    before it becomes `model`, and anything after it becomes `finish`.
+    """
+    # This regular expression means:
+    # - (.*?): Any text before the capacity (non-greedy).
+    # - (\d+(?:GB|TB)): The capacity, which comes in "GB" or "TB".
+    # - (.*): Any text after the capacity.
+    match = re.search(r'^(.*?)\s+(\d+(?:GB|TB))\s+(.*)$', product_title)
+
     if match:
-        model = match.group(1).strip()  # Text before capacity
-        capacity = match.group(2).strip()  # Capacity itself
-        finish = match.group(3).strip()  # Text after capacity
+        model = match.group(1).strip()
+        capacity = match.group(2).strip()
+        finish = match.group(3).strip()
         return model, capacity, finish
     return None, None, None  # Return None if no match found
 
