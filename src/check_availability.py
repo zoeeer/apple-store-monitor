@@ -202,11 +202,11 @@ def check_product_availability(product: Product | str, recursive=False) -> tuple
     return None, None
 
 
-def check_availability(product=None, randomly=False, check_all=False, recursive=False):
+def check_availability(product=None, pick_mode=None, recursive=False):
 
     if product:
         check_product_availability(product, recursive)
-    elif randomly:
+    elif pick_mode == "random":
         # Randomly select a known product
         product_count = Product.select().count()
         random_offset = random.randrange(product_count)
@@ -214,7 +214,15 @@ def check_availability(product=None, randomly=False, check_all=False, recursive=
         product: Product = Product.select().offset(random_offset).first()
         logger.info(f"Checking availability for {product.part_number} ({product.product_title})")
         check_product_availability(product, recursive)
-    elif check_all:
+    elif pick_mode == "oldest":
+        # Select the (roughly) least recently updated product
+        # Note: here we simply select the oldest updated record, but this product at other store
+        # could have been updated more recently
+        oldest_updated = LatestAvailability.select().order_by(LatestAvailability.update_time).first()
+        product: Product = Product.select().where(Product.part_number == oldest_updated.part_number).first()
+        logger.info(f"Checking availability for {product.part_number} ({product.product_title})")
+        check_product_availability(product, recursive)
+    elif pick_mode == "all":
         for part_number in models.values():
             check_product_availability(part_number, recursive)
             time.sleep(3 + random.uniform(0.1, 2.5))
@@ -227,7 +235,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Save HTTP request and response in HAR format.")
     parser.add_argument("--product", help="Product part number.")
     parser.add_argument("--random", action="store_true", help="Check availability for a random product.")
+    parser.add_argument("--oldest", action="store_true", help="Check availability for the least recently updated product.")
     parser.add_argument("--check-all", action="store_true", help="Check availability for all products.")
+    parser.add_argument("-r", "--recursive", action="store_true", help="Recursively check availability if recommendations are available.")
     parser.add_argument("--url", help="URL to send the request to.", default=recommendations_url)
     parser.add_argument("--har-save-path", type=str, help="File path to save HAR to.")
     parser.add_argument("--cookie-jar", type=str, help="Input cookie jar file path.")
@@ -235,4 +245,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    check_availability(args.product, args.random, args.check_all)
+    pick_mode = None
+
+    if args.random:
+        pick_mode = "random"
+    elif args.oldest:
+        pick_mode = "oldest"
+    elif args.check_all:
+        pick_mode = "all"
+
+    check_availability(args.product, pick_mode, args.recursive)

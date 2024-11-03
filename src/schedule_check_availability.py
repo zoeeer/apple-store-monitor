@@ -10,12 +10,14 @@ from check_availability import (
 )
 
 
-def real_job(product=None, randomly=False):
+def real_job(product=None, randomly=False, oldest=False):
     current_time = datetime.now()
     print(current_time.isoformat())
     try:
         if randomly:
-            check_availability(randomly=randomly)
+            check_availability(pick_mode="random")
+        elif oldest:
+            check_availability(pick_mode="oldest", recursive=True)
         else:
             check_product_availability(product)
     except RuntimeError as e:
@@ -30,7 +32,7 @@ if __name__ == "__main__":
     s1.allow_at = lambda t: '06:00' <= t.time().strftime("%H:%M") < "22:00"
     s1.every(1).to(3).minutes.do(real_job, product=models["desert-256g"])
     # test
-    # s1.every(3).to(5).seconds.do(real_job, randomly=True)
+    # s1.every(3).to(5).seconds.do(real_job, oldest=True)
 
     s2 = schedule.Scheduler()
     s2.allow_at = lambda t: '07:00' <= t.time().strftime("%H:%M") < "09:30"
@@ -39,7 +41,7 @@ if __name__ == "__main__":
 
     s3: schedule.Scheduler = schedule.Scheduler()
     s3.allow_at = lambda t: True
-    s3.every(2).to(5).minutes.do(real_job, randomly=True)
+    s3.every(2).to(5).minutes.do(real_job, oldest=True)
 
     print("scheduled!")
 
